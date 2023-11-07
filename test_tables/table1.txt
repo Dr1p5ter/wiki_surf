@@ -1,5 +1,5 @@
 <blank>
-<\\split\\>
+<split>
 link_1
 link_2
 link_3

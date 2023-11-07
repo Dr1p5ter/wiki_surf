@@ -2,7 +2,7 @@ was_here_1
 was_here_1
 was_here_1
 was_here_1
-<\\\>
+<split>
 link_1
 link_2
 link_3
