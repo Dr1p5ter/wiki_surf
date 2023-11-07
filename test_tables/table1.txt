@@ -1,4 +1,3 @@
-<blank>
 <split>
 link_1
 link_2
