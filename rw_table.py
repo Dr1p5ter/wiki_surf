@@ -13,8 +13,11 @@ def write_ref_file(path_to_file : str, ref_list : list[str]) -> int :
         with open(path_to_file, "w") as file :
             # saves references to other files after spacer
             for ref in ref_list :
-                file.write(ref + '\n')
-                entry_length += 1
+                try :
+                    file.write(ref + '\n')
+                    entry_length += 1
+                except:
+                    None
 
             # close file
             file.close()
