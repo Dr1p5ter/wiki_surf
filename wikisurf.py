@@ -1,5 +1,6 @@
 import requests
 import sys
+import time
 import os
 from termcolor import colored
 from bs4 import BeautifulSoup
@@ -19,8 +20,23 @@ slug_permalink :
 
 def find_ref_in_url(url : str) -> list[str]:
     # send a request to get the packet and open it for html parsing
-    resp = requests.get(url)
-    soup = BeautifulSoup(resp.content, 'html.parser')
+    try :
+        resp = requests.get(url)
+    except Exception as err :
+        print(colored(f'request unable to be made : Error {err} occured', 'yellow'))
+        return None
+    soup = None
+    if resp.status_code == 200 :
+        soup = BeautifulSoup(resp.content, 'html.parser')
+    elif resp.status_code == 429 :
+        # handle instance of too many requests sent to avoid timeout
+        print(colored(f'[Error 429 occured : pausing for {int(resp.headers['Retry-After'])}]', 'yellow'))
+        time.sleep(int(resp.headers['Retry-After']))
+        print(colored('Resuming...', 'yellow'))
+        return find_ref_in_url(url)
+    else :
+        print(colored(f'Error {resp.status_code} occured : unsupported handle', 'red'))
+        return None
 
     # go into the html file and find only the parser output associated with the content body
     ps = soup.find('div', attrs = {'id' : 'bodyContent'})
@@ -64,6 +80,8 @@ if __name__ == "__main__":
     queue = [str(sys.argv[1])]
     max_depth = int(sys.argv[2])
     cur_depth = 0
+    num_writes = 0
+    num_files = 0
     while cur_depth != max_depth :
         # tell console progress at depth
         print(f'beginning at depth {cur_depth}')
@@ -71,18 +89,35 @@ if __name__ == "__main__":
         # make a new queue and go through until old queue is empty
         new_queue = list()
         max_queue_len = int(len(queue))
-        while len(queue) != 0 :
+        for i in range(max_queue_len) :
             # pop the first element of the queue
-            popped_slug_permalink = queue.pop(0)
+            slug_permalink = queue[i]
 
-            # retrieve list of references to that url and then write to a file the output
-            list_of_refs = find_ref_in_url(host_url + popped_slug_permalink)
-            if write_ref_file(output_folder + '\\' + popped_slug_permalink.replace('/', '(~)') + '.txt', list_of_refs) != 0 :
+            # retrieve list of references to that url
+            list_of_refs = find_ref_in_url(host_url + slug_permalink)
+            if list_of_refs == None :
+                print(colored(f'{host_url + slug_permalink} not reachable (skipping)', 'yellow'))
+                continue
+
+            # write to a file the output
+            write_count = write_ref_file(output_folder + '\\' + slug_permalink.replace('/', '(~)') + '.txt', list_of_refs)
+            if write_count != 0 :
+                # add count to total
+                num_writes += write_count
+                num_files += 1
+
                 # if there was things written then add it to the new queue
-                for ref in list_of_refs :
+                for ref in set(list_of_refs) :
                     new_queue.append(ref)
 
             # tell console progress of queue
-            print(f'{(((max_queue_len - len(queue)) / max_queue_len) * 100):5.4}%')
+            print(f'{(((i + 1) / max_queue_len) * 100):5.4}%')
         queue = new_queue
         cur_depth += 1
+
+    # print total number of links wrote to the folder
+    print(colored(f'Total number of writes is {num_writes}', 'cyan'))
+    print(colored(f'Total number of files in folder is {num_files}', 'cyan'))
+
+    # end program
+    sys.exit(0)
