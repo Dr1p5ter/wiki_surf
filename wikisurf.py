@@ -27,7 +27,7 @@ def find_ref_in_url(url : str) -> list[str]:
         soup = BeautifulSoup(resp.content, 'html.parser')
     elif resp.status_code == 429 :
         # handle instance of too many requests sent to avoid timeout
-        logging.info(colored(f'[Error 429 occured : pausing for {int(resp.headers['Retry-After'])}]', 'yellow'))
+        logging.info(colored(f'[Error 429 occured : pausing for {int(resp.headers["Retry-After"])}]', 'yellow'))
         time.sleep(int(resp.headers['Retry-After']))
         logging.info(colored('Resuming...', 'yellow'))
         return find_ref_in_url(url)
