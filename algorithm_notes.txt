@@ -1,0 +1,8 @@
+Algorithm make_web (input_url):
+    initialize queue with input_url
+    go through queue
+        grab raw html
+        grab references
+        write references
+        
+
