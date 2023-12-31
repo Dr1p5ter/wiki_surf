@@ -15,12 +15,15 @@ from termcolor import colored
 from rw_table import write_ref_file
 
 # global variables
-host_url = 'https://en.wikipedia.org'
-output_folder = 'out'
-max_depth = 5
-min_depth = 1
-max_thread_count = 10
-min_thread_count = 2
+host_url = 'https://en.wikipedia.org'     # host url
+output_folder = 'out'                     # output directory
+max_depth = 3                             # max depth possible
+min_depth = 1                             # min depth possible
+max_thread_count = 20                     # max thread amount in pool
+min_thread_count = 2                      # min thread amount in pool
+resp_total = 0                            # total responses within the queue
+resp_finished = 0                        # number of responses finished by thread pool
+resp_lock = threading.Lock()
 
 # usage string
 usage_txt = """
@@ -39,8 +42,19 @@ number_of_threads_in_pool :
     max : 10
 """
 
+# utility function for combining sets
+def union_all_results(corpus_of_results : list) -> set :
+    union_set = set()
+    for lst in corpus_of_results :
+        union_set = union_set | set(lst)
+    return union_set
+
+# thread helper function
 def find_ref_in_url(url : str) -> list[str]:
-    print(colored(f'thread {threading.get_ident()} ', 'light_magenta'), colored(f'starting', 'red'))
+    # log beginning of thread lifespan
+    print(colored(f'thread {threading.get_ident():5}','light_magenta'),
+          colored(f' S ', 'green'))
+    
     # send a request to get the packet and open it for html parsing
     resp = requests.get(url)
     soup = None
@@ -53,6 +67,7 @@ def find_ref_in_url(url : str) -> list[str]:
         logging.info(colored('Resuming...', 'yellow'))
         return find_ref_in_url(url)
     else :
+        # Something occured that wasn't able to be tracked appropriately yet...
         logging.info(colored(f'Error {resp.status_code} occured : unsupported handle [skipping]', 'red'))
         return None
 
@@ -68,8 +83,35 @@ def find_ref_in_url(url : str) -> list[str]:
             ref = str(tag.get('href'))
             if ref.find('/wiki/') >= 0 and ref.find(':') == -1:
                 ref_list_for_url.append(ref)
-    print(colored(f'thread {threading.get_ident()} ', 'light_magenta'), colored(f'ending', 'red'))
+
+    # write the references into a file
+    ref_list_for_url = list(set(ref_list_for_url))
+    ref_list_for_url.sort(reverse=False)
+    write_ref_file(output_folder + '\\' + url[len(host_url)-1:].replace('/', '(~)') + '.txt', ref_list_for_url)
+
+    # log end of thread lifespan
+    with resp_lock :
+        global resp_finished
+        global resp_total
+        resp_finished += 1
+        print(colored(f'thread {threading.get_ident():5}','light_magenta'),
+              colored(f' E ', 'red'),
+              colored(f'{((resp_finished / resp_total) * 100):5.4}%', 'light_yellow'))
+    
+    # print list of references grabbed from thread response
     return ref_list_for_url
+
+# pool of thread helper function
+def execute_batch_of_threads(url_list : set[str]) -> set[str] :
+    new_refs = list([])
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor :
+        futures = [executor.submit(find_ref_in_url, host_url + url) for url in url_list]
+
+        # save sets when future is done
+        for future in concurrent.futures.as_completed(futures) :
+            new_refs.append(future.result())
+    ref_set = union_all_results(new_refs)
+    return ref_set
 
 # main program
 if __name__ == "__main__":
@@ -123,11 +165,17 @@ if __name__ == "__main__":
         os.mkdir(output_folder)
 
     # collect valid arguments from command line
-    queue = [str(sys.argv[1])]
+    queue = [str(sys.argv[1]).strip()]
     depth = int(sys.argv[2])
     thread_count = int(sys.argv[3])
 
     # make a pool of threads and begin moving through the queue
-    
+    dx = 0
+    while dx < depth :
+        resp_total = len(queue)
+        print([host_url + slug for slug in queue])
+        queue = execute_batch_of_threads(queue)
+        dx += 1
+        resp_finished = 0
 
     sys.exit(0)
